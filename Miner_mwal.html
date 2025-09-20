@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>/v/O:O\v\ – Mineur de blocs</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #111; color: #eee; margin:0; padding-top:260px; }
+    .form, .history { background: #222; padding: 15px; border-radius: 8px; margin:20px 0; }
+    label { display: block; margin-top: 10px; }
+    input, button { padding: 8px; margin-top: 5px; border: none; border-radius: 5px; }
+    input { background: #333; color: #fff; width: 100%; }
+    button { cursor: pointer; font-weight: bold; }
+    .btn-enregistrer { background: #0f0; color: #000; width: 100%; }
+    .btn-refresh { background: #ff9800; color: #000; margin-top: 10px; width: 100%; }
+    .btn-export { background: #00f; color: #fff; margin-top: 10px; width: 100%; }
+    .btn-export-pdf { background: #ff9800; color: #000; margin-top: 10px; width: 100%; }
+    .contrat { border: 1px solid #555; margin: 10px; padding: 10px; background: #fff; color: #000; }
+    .qrcode { margin-top: 10px; display:flex; gap:15px; flex-wrap:wrap; }
+    header {
+      position:fixed; top:0; left:0; width:100%;
+      background:#000; border-bottom:2px solid #0f0;
+      z-index:1000; padding:10px 0;
+    }
+    header h1 { margin:0; font-size:2.2rem; color:#0f0; text-shadow:0 0 10px #0f0; }
+    .header-top { display:flex; justify-content:center; align-items:center; gap:40px; }
+    .header-bottom { margin-top:10px; text-align:center; font-size:18px; font-weight:bold; color:#0f0; }
+    #statusGun { margin-top: 5px; font-weight: bold; font-size: 0.9em; }
+    #statusGun.green { color: lime; }
+    #statusGun.red { color: red; }
+    #statusGun.yellow { color: orange; }
+    #peerCount { margin-top:3px; font-size:0.9em; color:#0ff; }
+  </style>
+</head>
+<body>
+
+  <!-- 🌟 Header fixe -->
+  <header>
+    <div class="header-top">
+      <img src="mwollowm-marche.gif" alt="Animation MWOLLOWM" style="height:100px;">
+      <h1>/v/O:O\v\ – Mineur de blocs</h1>
+      <img src="mwollowm-marche.gif" alt="Animation MWOLLOWM" style="height:100px;">
+    </div>
+
+    <div id="bannerCours" class="header-bottom">
+      1 Mwal ≈ -- € 
+      | 🌍 <span style="color:#0ff;">Cumulative Balance = 0 €</span> 
+      | ⛏️ <span style="color:#ff9800;">0 blocs</span> 
+      | 📊 <span id="evolutionMwal" style="color:#aaa;">0%</span>
+      | <canvas id="sparkline" width="120" height="30"></canvas>
+    </div>
+
+    <!-- Indicateur connexion GUN -->
+    <div id="statusGun" class="yellow">🟡 Connexion à GUN...</div>
+    <div id="peerCount">🌐 Pairs connectés : 0</div>
+  </header>
+
+  <!-- Formulaire -->
+  <div class="form">
+    <h2>Ajouter un échange (Nouveau bloc)</h2>
+    <label>Nom du donneur :</label><input type="text" id="donneur" required>
+    <label>Nom du receveur :</label><input type="text" id="receveur" required>
+    <label>Montant en Mwal :</label><input type="number" id="mwal" step="0.00000001" required>
+    <label>Valeur en Euro (€) :</label><input type="number" id="euro" step="0.000000000000000001" required>
+    <label>Description :</label><input type="text" id="desc">
+
+    <label>Token (Base64) :</label><input type="text" id="tokenBase64" required>
+    <label>DATA :</label><input type="text" id="dataField" required>
+    <label>NA1C142 :</label><input type="text" id="na1c142" required>
+    <label>Base64 (2) :</label><input type="text" id="base642" required>
+
+    <button class="btn-enregistrer" onclick="ajouterContrat()">⛏️ Miner Bloc</button>
+    <button class="btn-refresh" onclick="rafraichir()">🔄 Rafraîchir</button>
+  </div>
+
+  <!-- Historique -->
+  <div class="history">
+    <h2>Historique des échanges</h2>
+    <div id="historique"></div>
+  </div>
+
+  <!-- Recherche universelle -->
+  <div class="history">
+    <h2>🔍 Rechercher un bloc</h2>
+    <input type="text" id="searchField" placeholder="Nom, NA1C142, Token, Hash...">
+    <button onclick="rechercherBloc()">Rechercher</button>
+    <div id="resultatRecherche"></div>
+  </div>
+
+  <!-- Valeur moyenne -->
+  <div class="history">
+    <h2>Valeur moyenne du Mwal</h2>
+    <p id="moyenne">En attente de données...</p>
+    <small id="moyenneConvertie">--</small>
+  </div>
+
+  <!-- Graphique -->
+  <div class="history">
+    <h2>Évolution du Mwal</h2>
+    <canvas id="chartMwal"></canvas>
+    <button onclick="resetZoom()">🔄 Réinitialiser le zoom</button>
+    <button class="btn-export" onclick="exportCSV()">📄 Exporter CSV</button>
+    <button class="btn-export-pdf" onclick="exportPDF()">📑 Exporter PDF</button>
+  </div>
+
+<script>
+  // --- Connexion GUN ---
+  const gun = Gun(["https://validateur-luth.onrender.com/gun"]);
+  const statusEl = document.getElementById("statusGun");
+  const peerCountEl = document.getElementById("peerCount");
+  let peersConnected = new Set();
+
+  gun.on('hi', peer => {
+    statusEl.textContent = "🟢 Connecté à " + peer.url;
+    statusEl.className = "green";
+    peersConnected.add(peer.url);
+    peerCountEl.textContent = "🌐 Pairs connectés : " + peersConnected.size;
+  });
+
+  gun.on('bye', peer => {
+    statusEl.textContent = "🔴 Déconnecté de " + peer.url;
+    statusEl.className = "red";
+    peersConnected.delete(peer.url);
+    peerCountEl.textContent = "🌐 Pairs connectés : " + peersConnected.size;
+  });
+
+  let contrats = JSON.parse(localStorage.getItem("contratsMwal")) || [];
+
+  // --- Ajouter un contrat ---
+  async function ajouterContrat() {
+    let donneur = document.getElementById("donneur").value.trim();
+    let receveur = document.getElementById("receveur").value.trim();
+    let mwal = parseFloat(document.getElementById("mwal").value);
+    let euro = parseFloat(document.getElementById("euro").value);
+    let desc = document.getElementById("desc").value.trim();
+    let tokenBase64 = document.getElementById("tokenBase64").value.trim();
+    let dataField = document.getElementById("dataField").value.trim();
+    let na1c142 = document.getElementById("na1c142").value.trim();
+    let base642 = document.getElementById("base642").value.trim();
+
+    if (!donneur || !receveur || isNaN(mwal) || isNaN(euro) || !tokenBase64 || !dataField || !na1c142 || !base642) {
+      alert("⚠️ Tous les champs doivent être remplis !");
+      return;
+    }
+
+    let contrat = { 
+      date: new Date().toLocaleString(), donneur, receveur, mwal, euro, desc,
+      tokenBase64, dataField, na1c142, base642
+    };
+
+    contrat.hashBloc = await calculerHash(contrat);
+
+    contrats.push(contrat);
+    localStorage.setItem("contratsMwal", JSON.stringify(contrats));
+    afficherContrats();
+
+    gun.get("blocs").set(contrat);
+  }
+
+  async function calculerHash(contrat) {
+    let data = `${contrat.date}|${contrat.donneur}|${contrat.receveur}|${contrat.mwal}|${contrat.euro}|${contrat.desc}|${contrat.tokenBase64}|${contrat.dataField}|${contrat.na1c142}|${contrat.base642}`;
+    let encoder = new TextEncoder();
+    let hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(data));
+    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  // --- Affichage historique ---
+  function afficherContrats() {
+    let historiqueDiv = document.getElementById("historique");
+    historiqueDiv.innerHTML = "";
+    contrats.forEach(c => {
+      let bloc = document.createElement("div");
+      bloc.className = "contrat";
+      bloc.innerHTML = `
+        <b>${c.date}</b><br>
+        👤 ${c.donneur} → ${c.receveur}<br>
+        💰 ${c.mwal} Mwal = ${c.euro}€<br>
+        📝 ${c.desc}<br>
+        🔑 NA1C142 : ${c.na1c142}<br>
+        🔑 Token : ${c.tokenBase64}<br>
+        <small>Hash Bloc : ${c.hashBloc}</small>
+      `;
+      historiqueDiv.appendChild(bloc);
+    });
+  }
+
+  // --- Recherche universelle ---
+  function rechercherBloc() {
+    let val = document.getElementById("searchField").value.trim().toLowerCase();
+    let resultatDiv = document.getElementById("resultatRecherche");
+    resultatDiv.innerHTML = "";
+
+    if (!val) return;
+
+    let results = contrats.filter(c =>
+      (c.donneur && c.donneur.toLowerCase().includes(val)) ||
+      (c.receveur && c.receveur.toLowerCase().includes(val)) ||
+      (c.na1c142 && c.na1c142.toLowerCase().includes(val)) ||
+      (c.tokenBase64 && c.tokenBase64.toLowerCase().includes(val)) ||
+      (c.hashBloc && c.hashBloc.toLowerCase().includes(val))
+    );
+
+    if (results.length === 0) {
+      resultatDiv.innerHTML = `<p style="color:red;">❌ Aucun bloc trouvé.</p>`;
+      return;
+    }
+
+    results.forEach(bloc => {
+      let div = document.createElement("div");
+      div.className = "contrat";
+      div.innerHTML = `
+        <b>${bloc.date}</b><br>
+        👤 ${bloc.donneur} → ${bloc.receveur}<br>
+        💰 ${bloc.mwal} Mwal = ${bloc.euro}€<br>
+        📝 ${bloc.desc}<br>
+        🔑 NA1C142 : ${bloc.na1c142}<br>
+        🔑 Token : ${bloc.tokenBase64}<br>
+        <small>Hash Bloc : ${bloc.hashBloc}</small>
+      `;
+      resultatDiv.appendChild(div);
+    });
+  }
+
+  // --- Rafraîchir ---
+  function rafraichir() {
+    contrats = JSON.parse(localStorage.getItem("contratsMwal")) || [];
+    afficherContrats();
+  }
+
+  // --- Export CSV ---
+  function exportCSV() {
+    if (contrats.length === 0) {
+      alert("❌ Aucun bloc à exporter");
+      return;
+    }
+
+    let csv = "Date,Donneur,Receveur,Mwal,Euro,NA1C142,TokenBase64,HashBloc\n";
+    contrats.forEach(c => {
+      csv += `"${c.date}","${c.donneur}","${c.receveur}",${c.mwal},${c.euro},"${c.na1c142}","${c.tokenBase64}","${c.hashBloc}"\n`;
+    });
+
+    let blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    let link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "blocs_mwal.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // --- Export PDF ---
+
+
+async function exportPDF() {
+  if (!contrats || contrats.length === 0) {
+    alert("❌ Aucun bloc à exporter");
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF("p", "mm", "a4");
+
+  // Dimensions et zones fixes
+  const pageW = pdf.internal.pageSize.getWidth();    // ~210mm
+  const pageH = pdf.internal.pageSize.getHeight();   // ~297mm
+  const margin = 10;             // marges latérales
+  const headerH = 18;            // hauteur d'en-tête
+  const footerH = 8;             // hauteur de pied de page
+  const contentTop = margin + headerH;          // y où commence l'image
+  const contentMaxH_mm = pageH - contentTop - (margin + footerH);
+
+  // En-tête + pied par page
+  function drawHeaderFooter(pageNo, totalPages) {
+    // En-tête
+    pdf.setFontSize(16); pdf.setTextColor(0,128,0);
+    pdf.text("/v/O:O\\v/ – Projet LUTH", pageW/2, margin + 6, { align: "center" });
+    pdf.setFontSize(10); pdf.setTextColor(100);
+    pdf.text(`Export : ${new Date().toLocaleString()}`, pageW/2, margin + 12, { align: "center" });
+    // Ligne séparatrice
+    pdf.setDrawColor(180); pdf.setLineWidth(0.2);
+    pdf.line(margin, margin + headerH - 2, pageW - margin, margin + headerH - 2);
+
+    // Pied
+    pdf.setFontSize(9); pdf.setTextColor(150);
+    pdf.text(`Page ${pageNo} / ${totalPages}`, pageW - margin, pageH - 5, { align: "right" });
+  }
+
+  // Laisse le temps au DOM de finir de peindre
+  await new Promise(r => requestAnimationFrame(r));
+
+  // Capture de l'historique seulement
+  const target = document.getElementById("historique");
+  const mainCanvas = await html2canvas(target, {
+    scale: Math.max(2, window.devicePixelRatio || 2),
+    backgroundColor: "#ffffff",
+    useCORS: true
+  });
+
+  // Conversion px -> mm (en conservant le ratio)
+  const imgW_mm = pageW - 2 * margin;
+  const ratio_mm_per_px = imgW_mm / mainCanvas.width;        // mm/px
+  const sliceH_px = Math.floor(contentMaxH_mm / ratio_mm_per_px);
+
+  // ✅ Recouvrement (évite la "coupure" visible entre deux pages)
+  const overlap_px = 8;  // 6–12 px marche bien selon ton style
+
+  const totalPages = Math.max(1, Math.ceil((mainCanvas.height + overlap_px) / (sliceH_px)));
+  const workCanvas = document.createElement("canvas");
+  const wctx = workCanvas.getContext("2d");
+
+  let pageNo = 1;
+  for (let y = 0; y < mainCanvas.height; y += (sliceH_px - overlap_px)) {
+    const h_px = Math.min(sliceH_px, mainCanvas.height - y);
+
+    // Préparer la "bande" à coller sur la page
+    workCanvas.width = mainCanvas.width;
+    workCanvas.height = h_px;
+    wctx.clearRect(0, 0, workCanvas.width, workCanvas.height);
+    wctx.drawImage(
+      mainCanvas,
+      0, y, mainCanvas.width, h_px,  // source (crop)
+      0, 0, mainCanvas.width, h_px   // destination (plein cadre)
+    );
+    const bandImg = workCanvas.toDataURL("image/png");
+    const bandH_mm = h_px * ratio_mm_per_px;
+
+    // Dessin sur la page courante
+    drawHeaderFooter(pageNo, totalPages);
+    pdf.addImage(bandImg, "PNG", margin, contentTop, imgW_mm, bandH_mm, undefined, "FAST");
+
+    // Page suivante si nécessaire
+    if (y + h_px < mainCanvas.height) {
+      pdf.addPage();
+      pageNo++;
+    }
+  }
+
+  pdf.save("registre_blocs_LUTH.pdf");
+}
+</script>
+
+</body>
+</html>
